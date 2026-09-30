@@ -48,7 +48,8 @@ def draw_grid(ax, data, highlight=None, color="tab:blue", fontsize=9, facecolors
                 face, text_color = fc[r, c], "black"
             else:
                 face, text_color = (color, "white") if selected else (BASE, "black")
-            ax.add_patch(mpatches.Rectangle((c, nrows - 1 - r), 1, 1, facecolor=face, edgecolor=EDGE))
+            ax.add_patch(mpatches.Rectangle((c, nrows - 1 - r), 1, 1, facecolor=face, edgecolor=EDGE,
+                                             clip_on=False))
             try:
                 label = f"{float(data[r, c]):.1f}"
             except (TypeError, ValueError):
@@ -445,26 +446,33 @@ def make_vstack():
     col_means = temp_celsius.mean(axis=0)
     index_row = np.arange(6, dtype=float)
     stacked = np.vstack([index_row, col_means])
+    # one colour per input array; each keeps its colour as a row of the result
+    row_colors = np.repeat(np.array(CATEGORICAL[:2])[:, None], 6, axis=1)
 
-    fig = plt.figure(figsize=(10, 4))
-    outer = fig.add_gridspec(1, 3, width_ratios=[6, 1.4, 6], top=0.8, bottom=0.1)
+    cell = 0.42                              # inches per cell, the same in every grid
+    fig = plt.figure(figsize=(8.4, 3.6))
+    gx_in, gx_res = 0.6, 5.0
+    gy_a, gy_b = 2.05, 0.5                   # index_row above col_means
+    y_mid = (gy_a + gy_b + cell) / 2         # halfway between the two inputs' centres
 
-    left_gs = outer[0].subgridspec(2, 1, hspace=0.7)
-    ax_a = fig.add_subplot(left_gs[0])
-    draw_grid(ax_a, index_row[None, :])
-    ax_a.set_title("index_row  (6,)", fontsize=9, family="monospace")
-    ax_b = fig.add_subplot(left_gs[1])
-    draw_grid(ax_b, col_means[None, :])
-    ax_b.set_title("col_means  (6,)", fontsize=9, family="monospace")
+    ax_a = fig.add_axes([0, 0, 1, 1])
+    draw_grid(ax_a, index_row[None, :], facecolors=row_colors[0])
+    ax_a.set_title("index_row  (6,)", fontsize=9, family="monospace", pad=6)
+    place_grid(fig, ax_a, gx_in, gy_a, cell)
+    ax_b = fig.add_axes([0, 0, 1, 1])
+    draw_grid(ax_b, col_means[None, :], facecolors=row_colors[1])
+    ax_b.set_title("col_means  (6,)", fontsize=9, family="monospace", pad=6)
+    place_grid(fig, ax_b, gx_in, gy_b, cell)
 
-    ax_mid = fig.add_subplot(outer[1])
-    ax_mid.axis("off")
-    ax_mid.text(0.5, 0.5, "vstack\n->", fontsize=13, family="monospace", ha="center", va="center",
-                transform=ax_mid.transAxes)
+    ax_res = fig.add_axes([0, 0, 1, 1])
+    draw_grid(ax_res, stacked, facecolors=row_colors)
+    ax_res.set_title("stacked  (2, 6)", fontsize=10, family="monospace", pad=6)
+    for r in range(2):
+        ax_res.text(6.2, 1 - r + 0.5, f"row {r}", ha="left", va="center",
+                    fontsize=9, family="monospace", color=MUTED_INK)
+    place_grid(fig, ax_res, gx_res, y_mid - cell, cell)
 
-    ax_res = fig.add_subplot(outer[2])
-    draw_grid(ax_res, stacked)
-    ax_res.set_title("stacked  (2, 6)", fontsize=10, family="monospace")
+    arrow_inches(fig, gx_in + 6 * cell + 0.3, gx_res - 0.3, y_mid, "vstack")
 
     fig.suptitle("np.vstack([index_row, col_means])", fontsize=11, y=0.95)
     fig.savefig(f"{OUT}/numpy_vstack.png", dpi=200, transparent=True)
