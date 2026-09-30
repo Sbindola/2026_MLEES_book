@@ -3,18 +3,28 @@ Generates the 11 static diagrams embedded in part-I/1.3-numpy.ipynb via {figure}
 Original artwork built from the lecture's own temp_celsius (4, 6) example -- not copied
 from numpy's docs (those illustrations are third-party, CC BY-NC-SA) or any other source.
 
-Run: uv run python edits_from_previous/make_numpy_diagrams.py
-Writes PNGs directly into part-I/_static/.
+Run: uv run python part-I/_static/make_numpy_diagrams.py [name ...]
+Writes PNGs next to this script, into part-I/_static/. With no arguments it redraws all 11;
+naming figures (e.g. `reductions_axis reshape`) redraws only those, so the others stay
+byte-identical.
 """
+import sys
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
 
-OUT = str(Path(__file__).resolve().parent.parent / "part-I" / "_static")
+OUT = str(Path(__file__).resolve().parent)
 
 EDGE = "#333333"
 BASE = "#f0f0f0"
+MUTED_INK = "#52514e"
+
+# one fill per column (or per row) in the reduction and reshape diagrams; this order keeps
+# neighbouring colours distinct under colour-vision deficiency, and every fill keeps black
+# text above 4:1 contrast
+CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
 
 temp_celsius = np.array([
     [ 5.2,  4.8,  6.1,  3.9,  2.7,  4.4],
@@ -24,23 +34,27 @@ temp_celsius = np.array([
 ])
 
 
-def draw_grid(ax, data, highlight=None, color="tab:blue", fontsize=9):
-    """Draw a 1D or 2D array as a grid of labelled cells; `highlight` (same shape) marks cells to colour."""
+def draw_grid(ax, data, highlight=None, color="tab:blue", fontsize=9, facecolors=None):
+    """Draw a 1D or 2D array as a grid of labelled cells; `highlight` (same shape) marks cells to colour.
+    `facecolors` (same shape, colour strings) instead gives every cell its own fill, with black text."""
     data = np.atleast_2d(data)
     hi = np.atleast_2d(highlight) if highlight is not None else None
+    fc = np.atleast_2d(facecolors) if facecolors is not None else None
     nrows, ncols = data.shape
     for r in range(nrows):
         for c in range(ncols):
             selected = hi is not None and hi[r, c]
-            face = color if selected else BASE
+            if fc is not None:
+                face, text_color = fc[r, c], "black"
+            else:
+                face, text_color = (color, "white") if selected else (BASE, "black")
             ax.add_patch(mpatches.Rectangle((c, nrows - 1 - r), 1, 1, facecolor=face, edgecolor=EDGE))
             try:
                 label = f"{float(data[r, c]):.1f}"
             except (TypeError, ValueError):
                 label = str(data[r, c])
             ax.text(c + 0.5, nrows - 1 - r + 0.5, label,
-                    ha="center", va="center", fontsize=fontsize,
-                    color="white" if selected else "black")
+                    ha="center", va="center", fontsize=fontsize, color=text_color)
     ax.set_xlim(0, ncols)
     ax.set_ylim(0, nrows)
     ax.set_aspect("equal")
@@ -97,6 +111,27 @@ def add_axis_labels(ax, nrows, ncols, show_axis0=True, show_axis1=True, pad=0.5)
                 fontsize=9, family="monospace", rotation=90)
     ax.set_xlim(-pad - 0.9 if show_axis0 else -0.2, ncols + 0.3)
     ax.set_ylim(-0.3, nrows + (pad + 0.5 if show_axis1 else 0.2))
+
+
+def place_grid(fig, ax, gx, gy, cell):
+    """Position `ax` so the grid's lower-left corner sits at (gx, gy) inches and one cell is
+    `cell` inches wide -- every grid placed this way draws its cells at the same size.
+    Call after the axes limits are final."""
+    x0, x1 = ax.get_xlim()
+    y0, y1 = ax.get_ylim()
+    fig_w, fig_h = fig.get_size_inches()
+    ax.set_position([(gx + x0 * cell) / fig_w, (gy + y0 * cell) / fig_h,
+                     (x1 - x0) * cell / fig_w, (y1 - y0) * cell / fig_h])
+
+
+def arrow_inches(fig, x0, x1, y, label):
+    """Horizontal arrow from x0 to x1 at height y, all in inches, with a label above it."""
+    fig.add_artist(mpatches.FancyArrowPatch(
+        (x0, y), (x1, y), transform=fig.dpi_scale_trans,
+        arrowstyle="->", color="#444444", linewidth=1.4, mutation_scale=15,
+    ))
+    fig.text((x0 + x1) / 2, y + 0.1, label, transform=fig.dpi_scale_trans,
+             fontsize=9, family="monospace", ha="center", va="bottom")
 
 
 # ---------------------------------------------------------------------------
@@ -317,29 +352,47 @@ def make_mean_sum():
 def make_reductions_axis():
     col_means = temp_celsius.mean(axis=0)
     row_means = temp_celsius.mean(axis=1)
+    # colour follows what gets averaged together: each column shares one colour for
+    # axis=0, each row for axis=1, and its mean in the result carries the same colour
+    col_colors = np.tile(CATEGORICAL, (4, 1))
+    row_colors = np.repeat(np.array(CATEGORICAL[:4])[:, None], 6, axis=1)
 
-    fig = plt.figure(figsize=(11, 6))
-    outer = fig.add_gridspec(2, 2, width_ratios=[6, 6], height_ratios=[1, 1], hspace=1.1, wspace=0.4)
+    cell = 0.42                              # inches per cell, the same in every grid
+    fig = plt.figure(figsize=(8.4, 6.5))
+    gx_main, gx_res = 1.0, 5.45
+    arrow_x0, arrow_x1 = gx_main + 6 * cell + 0.3, gx_res - 0.3
 
-    ax_main1 = fig.add_subplot(outer[0, 0])
-    draw_grid(ax_main1, temp_celsius)
+    # top: axis=0 averages down each column
+    gy = 3.75
+    ax_main1 = fig.add_axes([0, 0, 1, 1])
+    draw_grid(ax_main1, temp_celsius, facecolors=col_colors)
     add_axis_labels(ax_main1, 4, 6, show_axis0=True, show_axis1=False)
-    ax_main1.set_title("temp_celsius  (4, 6)", fontsize=10, family="monospace", pad=10)
-    ax_res1 = fig.add_subplot(outer[0, 1])
-    draw_grid(ax_res1, col_means[None, :])
-    ax_res1.set_title("col_means  (6,)", fontsize=10, family="monospace")
-    arrow_between(fig, ax_main1, ax_res1, "mean(axis=0)")
+    x0, x1 = ax_main1.get_xlim()             # centre the title on the grid, not the arrow margin
+    ax_main1.set_title("temp_celsius  (4, 6)", fontsize=10, family="monospace", pad=8,
+                       x=(3 - x0) / (x1 - x0))
+    place_grid(fig, ax_main1, gx_main, gy, cell)
+    ax_res1 = fig.add_axes([0, 0, 1, 1])
+    draw_grid(ax_res1, col_means[None, :], facecolors=CATEGORICAL)
+    ax_res1.set_title("col_means  (6,)", fontsize=10, family="monospace", pad=8)
+    place_grid(fig, ax_res1, gx_res, gy + 1.5 * cell, cell)
+    arrow_inches(fig, arrow_x0, arrow_x1, gy + 2 * cell, "mean(axis=0)")
 
-    ax_main2 = fig.add_subplot(outer[1, 0])
-    draw_grid(ax_main2, temp_celsius)
+    # bottom: axis=1 averages along each row
+    gy = 0.45
+    ax_main2 = fig.add_axes([0, 0, 1, 1])
+    draw_grid(ax_main2, temp_celsius, facecolors=row_colors)
     add_axis_labels(ax_main2, 4, 6, show_axis0=False, show_axis1=True)
-    ax_main2.set_title("temp_celsius  (4, 6)", fontsize=10, family="monospace", pad=28)
-    ax_res2 = fig.add_subplot(outer[1, 1])
-    draw_grid(ax_res2, row_means[None, :])
-    ax_res2.set_title("row_means  (4,), shown as a row", fontsize=10, family="monospace")
-    arrow_between(fig, ax_main2, ax_res2, "mean(axis=1)")
+    x0, x1 = ax_main2.get_xlim()
+    ax_main2.set_title("temp_celsius  (4, 6)", fontsize=10, family="monospace", pad=8,
+                       x=(3 - x0) / (x1 - x0))
+    place_grid(fig, ax_main2, gx_main, gy, cell)
+    ax_res2 = fig.add_axes([0, 0, 1, 1])
+    draw_grid(ax_res2, row_means[None, :], facecolors=CATEGORICAL[:4])
+    ax_res2.set_title("row_means  (4,), shown as a row", fontsize=10, family="monospace", pad=8)
+    place_grid(fig, ax_res2, gx_res, gy + 1.5 * cell, cell)
+    arrow_inches(fig, arrow_x0, arrow_x1, gy + 2 * cell, "mean(axis=1)")
 
-    fig.suptitle("temp_celsius.mean(axis=0) and temp_celsius.mean(axis=1)", fontsize=12, y=0.98)
+    fig.suptitle("temp_celsius.mean(axis=0) and temp_celsius.mean(axis=1)", fontsize=12, y=0.975)
     fig.savefig(f"{OUT}/numpy_reductions_axis.png", dpi=200, transparent=True)
     plt.close(fig)
 
@@ -349,15 +402,24 @@ def make_reductions_axis():
 # ---------------------------------------------------------------------------
 def make_reshape():
     flat = temp_celsius.reshape(-1)
+    # one colour per row; reshaping the colours the same way lays the rows end to end
+    row_colors = np.repeat(np.array(CATEGORICAL[:4])[:, None], 6, axis=1)
+    flat_colors = row_colors.reshape(-1)
 
     fig = plt.figure(figsize=(9, 5.2))
     outer = fig.add_gridspec(2, 1, height_ratios=[1.6, 1], hspace=0.7, top=0.93, bottom=0.12)
     ax_main = fig.add_subplot(outer[0])
-    draw_grid(ax_main, temp_celsius)
+    draw_grid(ax_main, temp_celsius, facecolors=row_colors)
     ax_main.set_title("temp_celsius  (4, 6)", fontsize=11, family="monospace")
+    for r in range(4):
+        ax_main.text(-0.2, 3 - r + 0.5, f"row {r}", ha="right", va="center",
+                     fontsize=9, family="monospace", color=MUTED_INK)
 
     ax_res = fig.add_subplot(outer[1])
-    draw_grid(ax_res, flat[None, :], fontsize=7)
+    draw_grid(ax_res, flat[None, :], fontsize=7, facecolors=flat_colors)
+    for r in range(4):
+        ax_res.text(6 * r + 3, -0.25, f"row {r}", ha="center", va="top",
+                    fontsize=8, family="monospace", color=MUTED_INK)
 
     fig.canvas.draw()
     bbox_t = ax_main.get_position(); bbox_b = ax_res.get_position()
@@ -429,16 +491,21 @@ def make_where_nan():
     plt.close(fig)
 
 
+FIGURES = {
+    "array_creation": make_array_creation,
+    "indexing_4panel": make_indexing_4panel,
+    "boolean_mask": make_boolean_mask,
+    "vectorized_add": make_vectorized_add,
+    "broadcast_impossible": make_broadcast_impossible,
+    "broadcast_result": make_broadcast_result,
+    "mean_sum": make_mean_sum,
+    "reductions_axis": make_reductions_axis,
+    "reshape": make_reshape,
+    "vstack": make_vstack,
+    "where_nan": make_where_nan,
+}
+
 if __name__ == "__main__":
-    make_array_creation()
-    make_indexing_4panel()
-    make_boolean_mask()
-    make_vectorized_add()
-    make_broadcast_impossible()
-    make_broadcast_result()
-    make_mean_sum()
-    make_reductions_axis()
-    make_reshape()
-    make_vstack()
-    make_where_nan()
+    for name in sys.argv[1:] or FIGURES:
+        FIGURES[name]()
     print("done")
