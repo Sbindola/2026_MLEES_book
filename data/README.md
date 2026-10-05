@@ -60,3 +60,49 @@ comments rechecked: the 1.1 solutions quote the first two records, 14.7 °F and 
 
 Station metadata: <https://mesonet.agron.iastate.edu/sites/site.php?station=IIB&network=IA_ASOS>.
 IEM terms of use: <https://mesonet.agron.iastate.edu/disclaimer.php>.
+
+## `part-I/uscrn_daily_2017_ny_millbrook_3w.txt`
+
+One year of daily observations from the U.S. Climate Reference Network (USCRN), station
+Millbrook 3 W, New York. Used in 1.5's lecture, section "Reading Data Files: Weather Station Data"
+and everything after it.
+
+| Field | Value |
+|---|---|
+| Station | WBANNO 64756, Millbrook 3 W, New York, US |
+| Location | 41.79° N, 73.74° W |
+| Period | 2017-01-01 to 2017-12-31, one row per day, 365 rows plus one header line |
+| Variables | 28 columns, as listed in NOAA's `HEADERS.txt`: daily air temperature, precipitation, solar radiation, surface temperature, relative humidity, and soil moisture and soil temperature at 5, 10, 20, 50 and 100 cm |
+| Missing values | −9999.0 (−99.000 in the three-decimal soil-moisture columns). No data at all on 2017-10-04; soil moisture at 5 cm is missing on 48 days, 43 of them in January and February |
+| Format | whitespace-separated text, variable-width columns; dates as `YYYYMMDD` |
+| Size | 79650 bytes |
+| md5 | `5129dcfd19300eb8d4d8d1673fcfbcb4` (the hash the 2025 edition pinned) |
+| sha256 | `f97637cf9909548a10843e9af352470b8aa1f9df5d971aa74e7478d63c7eca07` |
+| Licence | the Zenodo mirror is CC-BY-4.0; the underlying NOAA data are a US government product |
+
+### Origin
+
+The 2025 edition's pandas tutorial
+(<https://freddy0218.github.io/2025_MLEES_book_online/notebook/W3_S1_Tutorial.html>) fetched
+`data.txt` with pooch from the Zenodo record "Mirror of data from NOAA U.S. Climate Reference
+Network for Research Computing in Earth Science" (R. Abernathey,
+<https://doi.org/10.5281/zenodo.5564850>), pinned by md5. Downloaded from that record on
+2026-10-05; the md5 matched. The file was committed here under a descriptive name, bytes unchanged.
+
+### Upstream source
+
+`data.txt` is the mirror's `CRND0103-2017-NY_Millbrook_3_W.txt` with one header line of column
+names prepended; below the header the two are byte-identical (checked 2026-10-05). Compared the
+same day against NOAA's current file,
+<https://www.ncei.noaa.gov/pub/data/uscrn/products/daily01/2017/CRND0103-2017-NY_Millbrook_3_W.txt>:
+16 of 365 rows differ, all between 2017-10-06 and 2017-12-30, all in the soil-moisture columns,
+and never by more than 0.001 m³ m⁻³. NOAA reprocessed those values after the mirror was made.
+Column definitions and the missing-value codes are in
+<https://www.ncei.noaa.gov/pub/data/uscrn/products/daily01/README.txt>.
+
+### Before replacing it
+
+A fresh NOAA download has no header line and slightly different soil-moisture values, so
+`read_csv` would need `names=` and the hash in 1.5's fetch cell would change. Values quoted in 1.5's
+prose — 364 temperature values, 48 soil-moisture gaps, the `fillna(0)` bias — would need
+rechecking.
