@@ -1,0 +1,63 @@
+# Regenerates live/ (the Colab/Kaggle copies of every notebook) with tools/make_live.py on every
+# push to main, and commits the result back to main if anything changed. This keeps the badges in
+# sync even when a source notebook is pushed without running the script locally, and overwrites
+# any edit made to live/ directly (e.g. Colab's "Save a copy in GitHub").
+#
+# The bot's own push uses GITHUB_TOKEN, and pushes made with GITHUB_TOKEN do not trigger
+# workflows, so this does not re-run itself or re-deploy the site (live/ is excluded from the
+# site build anyway).
+
+name: Regenerate live/ notebooks
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One run at a time; a newer push replaces any run still waiting in the queue. Each run checks
+# out the tip of main, so the run that goes ahead covers every push made before it.
+concurrency:
+  group: 'make-live'
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      # Sparse checkout: make_live.py reads only the notebook folders and writes only live/,
+      # so skip data/ (~470 MB).
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: |
+            appendix
+            part-I
+            part-II
+            part-III
+            part-IV
+            live
+            tools
+
+      # Pinned to the book's Python so the output matches a local `make_live.py --check`.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Regenerate live/
+        run: python tools/make_live.py
+
+      - name: Commit and push if live/ changed
+        run: |
+          if [ -z "$(git status --porcelain -- live/)" ]; then
+            echo "live/ already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add live/
+          git commit -m "Regenerate live/ notebooks"
+          # main may have moved while this ran; rebase onto it rather than force-push
+          git pull --rebase origin main
+          git push origin HEAD:main

@@ -77,6 +77,7 @@ Understanding the build model prevents the most common mistakes.
 - **Source in, site out.** The repository contains only source: notebooks, markdown, `myst.yml`, and `references.bib`. The built website is generated fresh by CI on every push to `main`. **Never commit the `_build/` directory** — it is git-ignored for a reason.
 - **CI executes every notebook before publishing.** The deploy workflow installs the project's Python environment and runs each notebook, then builds the site from those fresh outputs — not from whatever you last saved locally. Lecture notebooks must run clean: any error there fails the *entire* deploy, not just that page. `*-exercises.ipynb` notebooks are the deliberate exception — their fill-in-the-blank cells (`_____`) are expected to raise, so CI lets those errors happen and strips only the failed cells' output afterward, leaving the blank code visible with no traceback. See §5 for what this means day to day.
 - **`main` is the published branch.** Any merge to `main` redeploys the site within a few minutes. Do not push directly to `main`; use a branch and a pull request (§4).
+- **CI also regenerates the Colab and Kaggle copies.** A second workflow rebuilds `live/` from the source notebooks on every push to `main` and commits the result itself, so after a merge that changed a notebook, `main` gains a follow-up commit from `github-actions[bot]`. Pull before you start new work. See §5.
 
 ---
 
@@ -164,27 +165,35 @@ these copies, not the book source. Colab renders neither MyST directives nor `_s
 paths, so `tools/make_live.py` converts admonitions to plain markdown, rewrites figures to raw
 GitHub URLs, strips outputs, and adds a setup cell that installs what a hosted runtime lacks.
 
-Every file in `live/` is overwritten the next time the script runs. An edit made there directly
-is erased without warning, and until then students opening the badge see a notebook that no
-longer matches the book. So:
+You do not regenerate `live/` yourself. The workflow `.github/workflows/make-live.yml` runs
+`tools/make_live.py` on every push to `main`, including the merge of your pull request, and
+commits any copies that changed back to `main` as `github-actions[bot]`. The badges pick up your
+change a few minutes after the merge; until then they open the previous version, or give a 404
+for a notebook that is new.
 
-- **Edit the source notebook in `part-*/` or `appendix/`, then regenerate:**
+That run also overwrites every file in `live/`, so an edit made there directly is lost. So:
+
+- **Edit only the source notebook in `part-*/` or `appendix/`.** You do not need to run
+  `tools/make_live.py` or commit anything in `live/`. Run it locally only if you want to see what
+  the Colab copy of your notebook looks like:
 
   ```bash
   python3 tools/make_live.py part-I/1.3-numpy.ipynb   # or no argument to regenerate all
   ```
 
-  Commit the regenerated `live/` file together with the source change. Colab and Kaggle fetch
-  `live/` from GitHub, so a copy that was not pushed shows the old version, or a 404 for a new
-  notebook.
+  If a regenerated copy ends up in your pull request, that is harmless: the workflow finds
+  nothing to change. If your pull request shows a conflict in a `live/` file, take `main`'s
+  version with `git checkout origin/main -- live/`; the workflow regenerates it after the merge
+  anyway.
 - **Do not save back to GitHub from Colab.** When you open a badge, Colab's *File → Save a copy
-  in GitHub* commits straight into `live/`. Even with no content change, Colab reorders the
-  notebook's JSON and adds its own metadata, so `python3 tools/make_live.py --check` then reports
-  the copy as stale. Use *File → Save a copy in Drive* for your own experiments. If you fixed
-  something while working in Colab, make the same change in the source notebook and regenerate.
-- **If a `live/` file was edited by mistake,** check whether the edit contains a real change
-  (compare cell sources, not the raw JSON diff, which Colab's reformatting inflates). Move
-  anything worth keeping into the source notebook, then regenerate to restore the copy.
+  in GitHub* commits straight into `live/`. A commit to `main` starts the workflow, which
+  regenerates the copy from the source notebook and discards your edit within minutes. Use
+  *File → Save a copy in Drive* for your own experiments. If you fixed something while working in
+  Colab, make the same change in the source notebook.
+- **If a `live/` file was edited by mistake,** the workflow will already have restored it. If the
+  edit contained a real change, find it with `git log -p -- live/<path>` (compare cell sources,
+  not the raw JSON diff, which Colab's reformatting inflates) and move it into the source
+  notebook.
 
 ---
 
@@ -299,7 +308,7 @@ A short checklist:
 
 - [ ] The book builds locally: `uv run jupyter book build --html` succeeds.
 - [ ] Any notebook you touched runs clean from a restarted kernel, and is committed with its outputs.
-- [ ] `live/` was regenerated with `tools/make_live.py`, not hand-edited, and `python3 tools/make_live.py --check` passes (§5).
+- [ ] Nothing in `live/` was edited by hand. You do not need to regenerate it; CI does that after the merge (§5).
 - [ ] Any dataset you added is a verified, hash-pinned snapshot in `data/<part>/`, fetched via `pooch` (§7) — not a bare third-party URL, and not committed unprompted if over 50 MB.
 - [ ] No `_build/`, no stray checkpoints, no notebook-generated output (`_files/`) are staged (`git status` is clean of these).
 - [ ] New pages are added to the `toc` in `myst.yml`.

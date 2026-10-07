@@ -25,7 +25,7 @@ The numpy array: creation, indexing, vectorised math, broadcasting, and reductio
 
 :::
 
-:::{card} 1.4) Visualization with matplotlib, cartopy, and xarray
+:::{card} 1.4) Visualisation with matplotlib, cartopy, and xarray
 :link: 1.4-matplotlib-and-xarray.ipynb
 
 Building figures with matplotlib, and labelled, multi-dimensional arrays with xarray.
